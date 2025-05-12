@@ -87,7 +87,7 @@ get_pass_times <- function(lat, lon) {
     data <- fromJSON(rawToChar(response$content)) #Convert raw JSON to useable form
     
     if (!is.null(data$passes)) {
-      return(head(data$passes$start, 3)) #If passes exists in the data, extract first three pass times. Note that these are ordered descending, so it should get the earliest three times.
+      return(head(data$passes$tca, 3)) #If passes exists in the data, extract first three pass times. Note that these are ordered descending, so it should get the earliest three times.
     }
   }
 
