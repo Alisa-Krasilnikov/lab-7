@@ -8,24 +8,50 @@ execute:
   echo: true
 ---
 
-
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
-```{r}
-1 + 33
+```{r, warning = FALSE, echo = TRUE}
+#| label: load-packages
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(purrr)
+library(readr)
+library(tidyverse)
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
+#| label: load-data
+capitals_names <- read_lines("https://people.sc.fsu.edu/~jburkardt/datasets/states/state_capitals_name.txt")
+capitals_lat_long <- read_lines("https://people.sc.fsu.edu/~jburkardt/datasets/states/state_capitals_ll.txt")
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+#| label: dataframe-cleaning
+latlon_df <- str_split(capitals_lat_long, "\\s+", simplify = TRUE) |>  
+  as.data.frame() |> 
+  rename(lat = V2, lon = V3)
+
+capitals_df <- str_split(capitals_names, "\\s+", simplify = TRUE) |>  
+  as.data.frame() |> 
+  rename(state = V1, capital = V2)
+
+full_capitals_dataset <- tibble(
+  state = capitals_df$state,
+  capital = capitals_df$capital,
+  latitude = latlon_df$lat,
+  longitude = latlon_df$lon
+)
+
+full_capitals_dataset <- full_capitals_dataset |> 
+  mutate(
+    capital = str_remove_all(capital, '"'),
+    latitude = as.numeric(latitude),
+    longitude = as.numeric(longitude)
+  )
+```
+
+
+```{r}
+#passtimes = GET("http://api.open-notify.org/iss-pass.json",
+ #   query = list(lat = 40.7, lon = -74))
+```
+
