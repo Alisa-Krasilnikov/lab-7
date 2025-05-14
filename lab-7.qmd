@@ -21,6 +21,8 @@ library(knitr)
 library(rnaturalearth)
 library(sf)
 library(rnaturalearthdata)
+library(tidyjson)
+#eab39c3c6fb6d4f959dbcb4ad3ad9a8205551bc1
 
 ```
 
@@ -57,8 +59,63 @@ full_capitals_dataset <- full_capitals_dataset |>
 
 
 ```{r}
-#passtimes = GET("http://api.open-notify.org/iss-pass.json",
- #   query = list(lat = 40.7, lon = -74))
+#| label: testing
+
+response <- GET("https://api.g7vrd.co.uk/v1/satellite-passes/25544/51.45/-2.5833.json")
+
+space <- response$content |> 
+  rawToChar() |>  
+  fromJSON()
+
+str(space)
+
+
+json_tbl <- response$content |> 
+  rawToChar() |> 
+  as.tbl_json()
+
+json_tbl |>  
+  spread_all() |> 
+  enter_object("passes") |> 
+  gather_array() |>     # if it's a JSON array
+  spread_all() |> 
+  select(start)
+```
+
+```{r}
+#| label: API-function
+get_pass_times <- function(lat, lon) {
+  #Construct the API URL for the given latitude and longitude
+  url <- paste0("https://api.g7vrd.co.uk/v1/satellite-passes/25544/", lat, "/", lon, ".json")
+  response <- GET(url) #Call the API 
+
+  if (status_code(response) == 200) {
+    data <- fromJSON(rawToChar(response$content)) #Convert raw JSON to useable form
+    
+    if (!is.null(data$passes)) {
+      return(head(data$passes$tca, 3)) #If passes exists in the data, extract first three pass times. Note that these are ordered descending, so it should get the earliest three times.
+    }
+  }
+
+  return(rep(NA, 3))  #Return 3 NAs if unavailable
+}
+```
+
+
+```{r}
+#| label: Getting-data
+
+capitals_with_passes <- full_capitals_dataset |> 
+  mutate(pass_times = pmap(list(latitude, longitude), get_pass_times))
+
+capitals_with_passes <- capitals_with_passes |> 
+  mutate(
+    #I got this from ChatGPT I'm going to be honest
+    pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
+    pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
+    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)
+  ) |> 
+  select(-pass_times)
 ```
 
 ```{r}
