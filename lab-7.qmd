@@ -16,7 +16,13 @@ library(dplyr)
 library(purrr)
 library(readr)
 library(tidyverse)
+library(leaflet)
+library(knitr)
+library(rnaturalearth)
+library(sf)
+library(rnaturalearthdata)
 library(tidyjson)
+#eab39c3c6fb6d4f959dbcb4ad3ad9a8205551bc1
 
 ```
 
@@ -105,11 +111,37 @@ capitals_with_passes <- capitals_with_passes |>
   mutate(
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
-    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)
-  ) |> 
-  #map_chr takes in a list, pass_times as its first argument, and a function as its second
-  #The function returns the # element if we have one, and NA otherwise
-  #Technically the "check" is not necessary, but it's safer to keep it
+    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |>
   select(-pass_times)
+```
+
+
+```{r}
+capitals <- ne_download(scale = "medium", type = "populated_places", category = "cultural", returnclass = "sf")
+
+
+us_capitals <- capitals |>
+  filter(ADM0NAME == "United States of America", FEATURECLA == "Admin-1 capital") |>
+  mutate(capital = if_else(NAMEASCII == "St. Paul", "St Paul", NAMEASCII))
+
+```
+
+```{r}
+#head(us_capitals)
+#capitals_with_passes
+us<-inner_join(us_capitals, capitals_with_passes, by = join_by(capital))
+
+```
+
+
+```{r}
+
+
+leaflet(capitals_with_passes) |> addTiles() %>%
+  addCircleMarkers(lng = capitals_with_passes$longitude, lat = us$latitude,
+             popup = paste(
+      "<b>", us$capital, "</b><br/>",
+      "Next Three ISS Passtimes: ", as_datetime(us$pass_time_1)))
+
 ```
 
