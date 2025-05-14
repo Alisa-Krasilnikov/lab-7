@@ -16,6 +16,12 @@ library(dplyr)
 library(purrr)
 library(readr)
 library(tidyverse)
+library(leaflet)
+library(knitr)
+library(rnaturalearth)
+library(sf)
+library(rnaturalearthdata)
+
 ```
 
 ```{r}
@@ -30,7 +36,7 @@ latlon_df <- str_split(capitals_lat_long, "\\s+", simplify = TRUE) |>
   as.data.frame() |> 
   rename(lat = V2, lon = V3)
 
-capitals_df <- str_split(capitals_names, "\\s+", simplify = TRUE) |>  
+capitals_df <- str_split(capitals_names, '"', simplify = TRUE) |>  
   as.data.frame() |> 
   rename(state = V1, capital = V2)
 
@@ -53,5 +59,41 @@ full_capitals_dataset <- full_capitals_dataset |>
 ```{r}
 #passtimes = GET("http://api.open-notify.org/iss-pass.json",
  #   query = list(lat = 40.7, lon = -74))
+```
+
+```{r}
+capitals <- ne_download(scale = "medium", type = "populated_places", category = "cultural", returnclass = "sf")
+
+
+us_capitals <- capitals |>
+  filter(ADM0NAME == "United States of America", FEATURECLA == "Admin-1 capital") |>
+  mutate(cleanedname = if_else(NAMEASCII == "St. Paul", "St Paul", NAMEASCII))
+
+```
+```{r}
+head(us_capitals)
+#full_capitals_dataset
+
+```
+
+```{r}
+leaflet(us_capitals) |> addTiles() |>
+  addPolygons(
+    fillColor = ~pal(Agree_Percent), weight = 1,
+    color = "white", fillOpacity = 0.8,
+    label = ~paste0(Country, ": ", Agree_Percent, "%"),
+    highlight = highlightOptions(
+      weight = 2, color = "#666",
+      fillOpacity = 0.9, bringToFront = TRUE
+    )
+    #Source: https://r-charts.com/spatial/interactive-maps-leaflet/
+  ) |>
+  
+  addLegend(
+    pal = pal, values = ~ Agree_Percent,
+    title = "Percentage of people who believe <br> vaccines are safe", position = "bottomright"
+    #Source line break: https://www.reddit.com/r/Rlanguage/comments/6bsji1/add_line_break_to_leaflet_pop_up/
+  ) 
+
 ```
 
