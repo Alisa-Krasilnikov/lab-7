@@ -113,7 +113,8 @@ capitals_with_passes <- capitals_with_passes |>
     #I got this from ChatGPT I'm going to be honest
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
-    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |> 
+    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)
+    ) |> 
   select(-pass_times)
 ```
 
@@ -162,9 +163,9 @@ leaflet(us) |>
 
 leaflet(us) |> addTiles() %>%
   addCircleMarkers(lng = us$LONGITUDE, lat = us$LATITUDE,
-             popup = ~paste0(
-      "<b>", capital, "</b><br/>",
-      "Next ISS Pass: ", as_datetime(pass_time_1)))
+             popup = paste(
+      "<b>", us$capital, "</b><br/>",
+      "Next ISS Pass: ", as_datetime(us$pass_time_1)))
 
 ```
 
