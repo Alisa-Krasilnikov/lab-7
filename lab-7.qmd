@@ -111,7 +111,7 @@ capitals_with_passes <- capitals_with_passes |>
   mutate(
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
-    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)
+    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |>
   select(-pass_times)
 ```
 
@@ -133,36 +133,15 @@ us<-inner_join(us_capitals, capitals_with_passes, by = join_by(capital))
 
 ```
 
-```{r}
-leaflet(us) |> 
-  addPolygons(
-    fillColor = ~pal(Agree_Percent), weight = 1,
-    color = "white", fillOpacity = 0.8,
-    label = ~paste0(Country, ": ", Agree_Percent, "%"),
-    highlight = highlightOptions(
-      weight = 2, color = "#666",
-      fillOpacity = 0.9, bringToFront = TRUE
-    )
-    #Source: https://r-charts.com/spatial/interactive-maps-leaflet/
-  ) |>
-  
-  addLegend(
-    pal = pal, values = ~ Agree_Percent,
-    title = "Percentage of people who believe <br> vaccines are safe", position = "bottomright"
-    #Source line break: https://www.reddit.com/r/Rlanguage/comments/6bsji1/add_line_break_to_leaflet_pop_up/
-  ) 
-
-```
-
 
 ```{r}
 
 
-leaflet(us) |> addTiles() %>%
-  addCircleMarkers(lng = us$LONGITUDE, lat = us$LATITUDE,
+leaflet(capitals_with_passes) |> addTiles() %>%
+  addCircleMarkers(lng = capitals_with_passes$longitude, lat = us$latitude,
              popup = paste(
       "<b>", us$capital, "</b><br/>",
-      "Next ISS Pass: ", as_datetime(us$pass_time_1)))
+      "Next Three ISS Passtimes: ", as_datetime(us$pass_time_1)))
 
 ```
 
