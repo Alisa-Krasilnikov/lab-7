@@ -113,10 +113,10 @@ capitals_with_passes <- capitals_with_passes |>
     #I got this from ChatGPT I'm going to be honest
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
-    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)
-  ) |> 
+    pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |> 
   select(-pass_times)
 ```
+
 
 ```{r}
 capitals <- ne_download(scale = "medium", type = "populated_places", category = "cultural", returnclass = "sf")
@@ -124,17 +124,19 @@ capitals <- ne_download(scale = "medium", type = "populated_places", category = 
 
 us_capitals <- capitals |>
   filter(ADM0NAME == "United States of America", FEATURECLA == "Admin-1 capital") |>
-  mutate(cleanedname = if_else(NAMEASCII == "St. Paul", "St Paul", NAMEASCII))
-
-```
-```{r}
-head(us_capitals)
-#full_capitals_dataset
+  mutate(capital = if_else(NAMEASCII == "St. Paul", "St Paul", NAMEASCII))
 
 ```
 
 ```{r}
-leaflet(us_capitals) |> addTiles() |>
+#head(us_capitals)
+#capitals_with_passes
+us<-inner_join(us_capitals, capitals_with_passes, by = join_by(capital))
+
+```
+
+```{r}
+leaflet(us) |> 
   addPolygons(
     fillColor = ~pal(Agree_Percent), weight = 1,
     color = "white", fillOpacity = 0.8,
@@ -151,6 +153,18 @@ leaflet(us_capitals) |> addTiles() |>
     title = "Percentage of people who believe <br> vaccines are safe", position = "bottomright"
     #Source line break: https://www.reddit.com/r/Rlanguage/comments/6bsji1/add_line_break_to_leaflet_pop_up/
   ) 
+
+```
+
+
+```{r}
+
+
+leaflet(us) |> addTiles() %>%
+  addCircleMarkers(lng = us$LONGITUDE, lat = us$LATITUDE,
+             popup = ~paste0(
+      "<b>", capital, "</b><br/>",
+      "Next ISS Pass: ", as_datetime(pass_time_1)))
 
 ```
 
