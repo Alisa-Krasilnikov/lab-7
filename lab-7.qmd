@@ -8,7 +8,7 @@ execute:
   echo: true
 ---
 
-```{r, warning = FALSE, echo = TRUE}
+```{r, message = FALSE, echo = FALSE}
 #| label: load-packages
 library(httr)
 library(jsonlite)
@@ -18,19 +18,20 @@ library(readr)
 library(tidyverse)
 library(leaflet)
 library(knitr)
-library(rnaturalearth)
-library(sf)
-library(rnaturalearthdata)
 library(tidyjson)
-#eab39c3c6fb6d4f959dbcb4ad3ad9a8205551bc1
-
 ```
+
+**Disclaimer:** This is a collaborative assignment, and we have differing preferences on which pipe operator to use. Sometimes you will see |> and sometimes you will see %>%. Since they function the same way, we chose not to standardize them.
+
+## Making the U.S.Capitals dataset 
 
 ```{r}
 #| label: load-data
 capitals_names <- read_lines("https://people.sc.fsu.edu/~jburkardt/datasets/states/state_capitals_name.txt")
 capitals_lat_long <- read_lines("https://people.sc.fsu.edu/~jburkardt/datasets/states/state_capitals_ll.txt")
 ```
+
+We first created a dataset that contains all of the capital names, as well as their latitude and longitude coordinates. 
 
 ```{r}
 #| label: dataframe-cleaning
@@ -45,41 +46,21 @@ capitals_df <- str_split(capitals_names, '"', simplify = TRUE) |>
   select(-V3) |> 
   mutate(state = trimws(state))
 
-full_capitals_dataset <- full_join(latlon_df, capitals_df, by = "state")
-
+full_capitals_dataset <- left_join(latlon_df, capitals_df, by = "state")
+#Technically a "join" is not necessary, since the columns are ordered the same, but we were worried it was going to cause issues
 
 full_capitals_dataset <- full_capitals_dataset |> 
   mutate(
-    capital = str_remove_all(capital, '"'),
     latitude = as.numeric(latitude),
     longitude = as.numeric(longitude)
   )
 ```
 
+## Calling an API to get pass times 
 
-```{r}
-#| label: testing
+We then created a function that inputs latitudes and longitudes, and retrieves the next three times that the ISS passes over that location. Note that the API has a maximum of 72 hours. So, if the ISS does not pass over a location within 72 hours, it will return NA. Additionally, because this API is time dependent, re-running it after some time may produce new results.
 
-response <- GET("https://api.g7vrd.co.uk/v1/satellite-passes/25544/51.45/-2.5833.json")
-
-space <- response$content |> 
-  rawToChar() |>  
-  fromJSON()
-
-str(space)
-
-
-json_tbl <- response$content |> 
-  rawToChar() |> 
-  as.tbl_json()
-
-json_tbl |>  
-  spread_all() |> 
-  enter_object("passes") |> 
-  gather_array() |>     # if it's a JSON array
-  spread_all() |> 
-  select(start)
-```
+**Note:** We used tca or "time of closest approach" as our pass time, but the API can also provide "start time" and "end time." These are only about 10 minutes apart, however, so whichever value is chosen should not make a big difference. 
 
 ```{r}
 #| label: API-function
@@ -92,39 +73,104 @@ get_pass_times <- function(lat, lon) {
     data <- fromJSON(rawToChar(response$content)) #Convert raw JSON to useable form
     
     if (!is.null(data$passes)) {
-      return(head(data$passes$tca, 3)) #If passes exists in the data, extract first three pass times. Note that these are ordered descending, so it should get the earliest three times.
+      return(head(data$passes$tca, 3)) #If passes exists in the data, extract first three tca pass times. Note that these are ordered descending, so it should get the earliest three times.
     }
   }
 
-  return(rep(NA, 3))  #Return 3 NAs if unavailable
+  return(rep(NA, 3))  #Return 3 NAs if calling the API fails
 }
 ```
 
+We now take our function and apply it to every row, thus producing a dataframe which contains the top three pass times for each capital. Because we wanted to limit our dataset to U.S. state capitals, we removed Puerto Rico. Additionally, there was an issue with the initial dataframe that we read in. It included two District of Columbias, one with the correct coordinates, and one with incorrect coordinates. We made sure to remove the incorrect one from the datset. 
 
 ```{r}
 #| label: Getting-data
 
-capitals_with_passes <- full_capitals_dataset |> 
-  mutate(pass_times = pmap(list(latitude, longitude), get_pass_times))
+capitals_all_passes <- full_capitals_dataset |> 
+  mutate(pass_times = pmap(list(latitude, longitude), get_pass_times)) 
+  #pass_times is a list of values
 
-capitals_with_passes <- capitals_with_passes |> 
+capitals_with_passes <- capitals_all_passes |> 
   mutate(
     #Extract up to three pass times from the lists in pass_times
     #The function checks if there is at least (number) elements in the list, if so, it extracts the (number) one, otherwise, it returns NA
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
     pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |>
-  select(-pass_times)
+  select(-pass_times) |>
+  filter(!state %in% c('US', 'PR'))
+
+
+```
+
+## Making the ISS passing visual
+
+The following takes our dataset and creates a visualization. 
+
+```{r creating labels and pop-ups}
+
+capitals_with_passes <- capitals_with_passes %>%
+  arrange(is.na(pass_time_1), pass_time_1) %>%
+  rowwise() %>%
+  mutate(
+    pop_up_html = if (is.na(pass_time_1)) {
+      paste0("<b>", capital, "</b><br/>",
+             "ISS will not pass over this location in the next 72 hours")
+    } else {
+      paste0("<b>", toupper(capital), "</b><br/>",
+             "Next Three ISS Passtimes:<br/>",
+             # read way many articles much about date time formatting and functions, but so happy with how it looks now
+             # https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-date-and-time-format-strings
+             format(as_datetime(pass_time_1), "%B %d, %Y  %I:%M %p %Z"),
+             "<br/>",
+             if_else(!is.na(pass_time_2),
+                     (format(as_datetime(pass_time_2), "%B %d, %Y  %I:%M %p %Z")),
+                     "No second pass"),
+             "<br/>",
+             if_else(!is.na(pass_time_3), (format(as_datetime(pass_time_3), "%B %d, %Y  %I:%M %p %Z")), 
+                     "No third pass"))
+    },  
+    
+    label_html = htmltools::HTML((paste0(
+      "<b>", toupper(capital), "<b><br/>",
+      if_else(is.na(pass_time_1),
+              "ISS will not pass over this location in the next 72 hours",
+              paste("Next ISS Passtime:",
+                    format(as_datetime(pass_time_1), "%B %d, %Y  %I:%M %p %Z"))
+     ))))
+  ) %>%
+  ungroup()
+
+# created new columns in the dataframe, because the html options were having issues running within the leaflet plot and to make the code for the plot cleaner
 ```
 
 ```{r}
-
-
-leaflet(capitals_with_passes) |> addTiles() %>%
-  addCircleMarkers(lng = capitals_with_passes$longitude, lat = capitals_with_passes$latitude,
-             popup = paste(
-      "<b>", capitals_with_passes$capital, "</b><br/>",
-      "Next Three ISS Passtimes: ", as_datetime(capitals_with_passes$pass_time_1)))
+#dropping NAs from the path
+caps<- capitals_with_passes|> filter(!is.na(pass_time_1))
 
 ```
 
+
+```{r}
+iss_icon <- icons(
+  iconUrl = here::here("pngtree-space-station-probe-icon-png-image_4687961.png"), 
+  iconWidth = 30, 
+  iconHeight = 30
+)
+
+leaflet(capitals_with_passes) |> addTiles() %>%
+  addMarkers(lng = ~longitude,
+             lat = ~latitude,
+             icon = iss_icon,
+             label = ~label_html,
+             popup = ~pop_up_html
+            # so excited to have discovered the use of the tilda('~')
+             ) |>
+  addPolylines(lng = caps$longitude,
+               lat = caps$latitude, 
+               color = "pink", #I made the lines link because it's coquette
+               opacity = 1)
+
+```
+
+Looks so good!
