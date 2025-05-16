@@ -10,6 +10,7 @@ execute:
 
 ```{r, warning = FALSE, echo = TRUE}
 #| label: load-packages
+#| message: false
 library(httr)
 library(jsonlite)
 library(dplyr)
@@ -18,9 +19,6 @@ library(readr)
 library(tidyverse)
 library(leaflet)
 library(knitr)
-library(rnaturalearth)
-library(sf)
-library(rnaturalearthdata)
 library(tidyjson)
 #eab39c3c6fb6d4f959dbcb4ad3ad9a8205551bc1
 
@@ -104,44 +102,84 @@ get_pass_times <- function(lat, lon) {
 ```{r}
 #| label: Getting-data
 
-capitals_with_passes <- full_capitals_dataset |> 
+capitals_all_passes <- full_capitals_dataset |> 
   mutate(pass_times = pmap(list(latitude, longitude), get_pass_times))
 
-capitals_with_passes <- capitals_with_passes |> 
+capitals_with_passes <- capitals_all_passes |> 
   mutate(
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
     pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |>
-  select(-pass_times)
-```
+  select(-pass_times) |>
+  filter(!state %in% c('US', 'PR'))
+  #There were two Districts of Columbia in the dataset, one with the wrong latitude, so we dropped the other DC and San Juan of Puerto Rico(not sure why this was showing up).
 
 
-```{r}
-capitals <- ne_download(scale = "medium", type = "populated_places", category = "cultural", returnclass = "sf")
-
-
-us_capitals <- capitals |>
-  filter(ADM0NAME == "United States of America", FEATURECLA == "Admin-1 capital") |>
-  mutate(capital = if_else(NAMEASCII == "St. Paul", "St Paul", NAMEASCII))
 
 ```
 
+```{r creating labels and pop-ups}
+
+capitals_with_passes <- capitals_with_passes %>%
+  arrange(is.na(pass_time_1), pass_time_1) %>%
+  rowwise() %>%
+  mutate(
+    pop_up_html = if (is.na(pass_time_1)) {
+      paste0("<b>", capital, "</b><br/>",
+             "ISS will not pass over this location in the next 72 hours")
+    } else {
+      paste0("<b>", toupper(capital), "</b><br/>",
+             "Next Three ISS Passtimes:<br/>",
+             # read way many articles much about date time formatting and functions, but so happy with how it looks now
+             # https://learn.microsoft.com/en-us/dotnet/standard/base-types/standard-date-and-time-format-strings
+             format(as_datetime(pass_time_1), "%B %d, %Y  %I:%M %p %Z"),
+             "<br/>",
+             if_else(!is.na(pass_time_2),
+                     (format(as_datetime(pass_time_2), "%B %d, %Y  %I:%M %p %Z")),
+                     "No second pass"),
+             "<br/>",
+             if_else(!is.na(pass_time_3), (format(as_datetime(pass_time_3), "%B %d, %Y  %I:%M %p %Z")), 
+                     "No third pass"))
+    },  
+    
+    label_html = htmltools::HTML((paste0(
+      "<b>", toupper(capital), "<b><br/>",
+      if_else(is.na(pass_time_1),
+              "ISS will not pass over this location in the next 72 hours",
+              paste("Next ISS Passtime:",
+                    format(as_datetime(pass_time_1), "%B %d, %Y  %I:%M %p %Z"))
+     ))))
+  ) %>%
+  ungroup()
+
+# created new columns in the dataframe, because the html options were having issues running within the leaflet plot and to make the code for the plot cleaner
+```
+
 ```{r}
-#head(us_capitals)
-#capitals_with_passes
-us<-inner_join(us_capitals, capitals_with_passes, by = join_by(capital))
+#dropping NAs from the path
+caps<- capitals_with_passes|> filter(!is.na(pass_time_1))
 
 ```
 
 
-```{r}
 
+```{r}
+iss_icon <- icons(
+  iconUrl = here::here("pngtree-space-station-probe-icon-png-image_4687961.png"), 
+  iconWidth = 30, 
+  iconHeight = 30
+)
 
 leaflet(capitals_with_passes) |> addTiles() %>%
-  addCircleMarkers(lng = capitals_with_passes$longitude, lat = us$latitude,
-             popup = paste(
-      "<b>", us$capital, "</b><br/>",
-      "Next Three ISS Passtimes: ", as_datetime(us$pass_time_1)))
+  addMarkers(lng = ~longitude,
+             lat = ~latitude,
+             icon = iss_icon,
+             label = ~label_html,
+             popup = ~pop_up_html
+            # so excited to have discovered the use of the tilda('~')
+             ) |>
+  addPolylines(lng = caps$longitude,
+               lat = caps$latitude)
 
 ```
 
