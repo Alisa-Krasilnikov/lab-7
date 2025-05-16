@@ -168,7 +168,7 @@ leaflet(capitals_with_passes) |> addTiles() %>%
              ) |>
   addPolylines(lng = caps$longitude,
                lat = caps$latitude, 
-               color = "pink", #I made the lines link because it's coquette
+               color = "pink", #I made the lines pink because it's coquette
                opacity = 1)
 
 ```
