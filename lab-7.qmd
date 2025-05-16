@@ -109,6 +109,9 @@ capitals_with_passes <- full_capitals_dataset |>
 
 capitals_with_passes <- capitals_with_passes |> 
   mutate(
+    #Extract up to three pass times from the lists in pass_times
+    #Use map_chr to ensure each output is a character vector of length 1
+    #The function checks if there is at least (number) elements in the list, if so, it extracts the (number) one, otherwise, it returns NA
     pass_time_1 = map_chr(pass_times, ~ if(length(.) >= 1) .[1] else NA), 
     pass_time_2 = map_chr(pass_times, ~ if(length(.) >= 2) .[2] else NA),
     pass_time_3 = map_chr(pass_times, ~ if(length(.) >= 3) .[3] else NA)) |>
